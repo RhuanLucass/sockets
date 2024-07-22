@@ -30,7 +30,7 @@ void main(void)
   // Criando estrutura de endereçamento padrão
   dest_addr.sin_family = AF_INET;
   dest_addr.sin_port = htons(3333);
-  dest_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+  dest_addr.sin_addr.s_addr = inet_addr("127.0.0.1"); 
   bzero(&(dest_addr.sin_zero), 8);
 
   // Realizando conexão
