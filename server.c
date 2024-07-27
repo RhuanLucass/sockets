@@ -1,85 +1,119 @@
+/*
+		C socket server example, handles multiple clients using threads
+		Compile
+		gcc server.c -lpthread -o server
+*/
+
 #include <stdio.h>
-#include <stdlib.h>
-#include <strings.h>
-#include <errno.h>
-#include <sys/types.h>
+#include <string.h> //strlen
+#include <stdlib.h> //strlen
 #include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <string.h>
+#include <arpa/inet.h> //inet_addr
+#include <unistd.h>		 //write
+#include <pthread.h>	 //for threading , link with lpthread
 
-void main(void)
+// the thread function
+void *connection_handler(void *);
+
+int main(int argc, char *argv[])
 {
-  // Criando socket
+	int socket_desc, client_sock, c;
+	struct sockaddr_in server, client;
 
-  int iSock;
-  iSock = socket(AF_INET, SOCK_STREAM, 0); // Cria um novo socket com comunicação TCP/IP com IPv4 e tipo de comunicação TCP
-  // Se o socket for criado corretamente retornará um descritor para o arquivo
+	// Create socket
+	socket_desc = socket(AF_INET, SOCK_STREAM, 0);
+	if (socket_desc == -1)
+	{
+		printf("Could not create socket");
+	}
+	puts("Socket created");
 
-  if (iSock == -1)
-  {
-    perror("socket:");
-    exit(1);
-  }
-  else
-  {
-    printf("Socket criado com sucesso!\n");
-  }
+	// Prepare the sockaddr_in structure
+	server.sin_family = AF_INET;
+	server.sin_addr.s_addr = INADDR_ANY;
+	server.sin_port = htons(8888);
 
-  // sockaddr
-  // Estrutura padrão definida com os parâmetros que devem ser passados para as outras funções
-  // Para TCP/IP utiliza-se sockaddr_in
+	// Bind
+	if (bind(socket_desc, (struct sockaddr *)&server, sizeof(server)) < 0)
+	{
+		// print the error message
+		perror("bind failed. Error");
+		return 1;
+	}
+	puts("bind done");
 
-  struct sockaddr_in my_addr;
+	// Listen
+	listen(socket_desc, 3);
 
-  my_addr.sin_family = AF_INET;         // Definindo a família de endereços
-  my_addr.sin_port = htons(3333);       // Definindo número da porta através da função htons (converte e ordena o endereço para um ordenamento em byte significativo)
-  my_addr.sin_addr.s_addr = INADDR_ANY; // Preenche o endereço IP com endereço local
-  bzero(&(my_addr.sin_zero), 8);        // Preenche com 0 os bytes não utilizados da estrutura
+	// Accept and incoming connection
+	puts("Waiting for incoming connections...");
+	c = sizeof(struct sockaddr_in);
+	pthread_t thread_id;
 
-  // Realizar associação do socket com a porta
-  if (bind(iSock, (struct sockaddr *)&my_addr, sizeof(struct sockaddr)) == -1)
-  {
-    perror("Bind: ");
-    exit(1);
-  }
+	while ((client_sock = accept(socket_desc, (struct sockaddr *)&client, (socklen_t *)&c)))
+	{
+		puts("Connection accepted");
 
-  // Habilitar conexões
-  if (listen(iSock, 10) < 0)
-  {
-    perror("Listen: ");
-    exit(1);
-  }
+		if (pthread_create(&thread_id, NULL, connection_handler, (void *)&client_sock) < 0)
+		{
+			perror("could not create thread");
+			return 1;
+		}
 
-  // Aceitar conexões
-  // 1 significa true, logo, irá aceitar conexões o tempo todo
-  while (1)
-  {
-    int iFd;                        // Receberá a conexão aceita
-    struct sockaddr_in client_addr; // Estrutura com as informações do cliente
-    socklen_t sin_size;             // Tamahno do endereço
-    char szMensagem[100];
-    sin_size = sizeof(struct sockaddr_in);
+		// Now join the thread , so that we dont terminate before the thread
+		// pthread_join( thread_id , NULL);
+		puts("Handler assigned");
+	}
 
-    if ((iFd = accept(iSock, (struct sockaddr *)&client_addr, &sin_size)) < 0)
-    {
-      perror("Accept: ");
-      exit(1);
-    }
+	if (client_sock < 0)
+	{
+		perror("accept failed");
+		return 1;
+	}
 
-    printf("\nServidor recebeu conexão de %s", inet_ntoa(client_addr.sin_addr));
+	return 0;
+}
 
-    memset(szMensagem, 0, sizeof(szMensagem));
-    strcpy(szMensagem, "Ola cliente\n");
+/*
+ * This will handle connection for each client
+ * */
+void *connection_handler(void *socket_desc)
+{
+	// Get the socket descriptor
+	int sock = *(int *)socket_desc;
+	int read_size;
+	char *message, client_message[2000];
 
-    // Enviando mensagem
-    if(send(iFd, szMensagem, strlen(szMensagem), 0) < 0){
-      perror("Send: ");
-      exit(1);
-    }
-    
-    // Fechando socket
-    close(iFd);
-  }
+	// Send some messages to the client
+	message = "Conexão realizada com sucesso!\n";
+	write(sock, message, strlen(message));
+
+	message = "Buscando arquivo...\n";
+	write(sock, message, strlen(message));
+
+	// Receive a message from client
+	while ((read_size = recv(sock, client_message, 2000, 0)) > 0)
+	{
+		// end of string marker
+		client_message[read_size] = '\0';
+
+		// Send the message back to client
+		// write(sock, client_message, strlen(client_message));
+		printf("Arquivo: %s\n", client_message);
+
+		// clear the message buffer
+		memset(client_message, 0, 2000);
+	}
+
+	if (read_size == 0)
+	{
+		puts("Client disconnected");
+		fflush(stdout);
+	}
+	else if (read_size == -1)
+	{
+		perror("recv failed");
+	}
+
+	return 0;
 }
