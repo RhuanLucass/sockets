@@ -27,20 +27,22 @@
 #include <sys/time.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 
 #define SEVPORT 3333
 #define MAXDATASIZE (1024 * 5)
 
-#define TIME_DIFF(t1, t2) (((t1).tv_sec - (t2).tv_sec) * 1000 + ((t1).tv_usec - (t2).tv_usec) / 1000)
+// #define TIME_DIFF(t1, t2) (((t1).tv_sec - (t2).tv_sec) * 1000 + ((t1).tv_usec - (t2).tv_usec) / 1000)
 
 int main(int argc, char *argv[])
 {
 	int sockfd, sendbytes, recvbytes;
-	char buf[MAXDATASIZE];
+	char buf[MAXDATASIZE], filepath[MAXDATASIZE], server_reply[MAXDATASIZE];
 	struct hostent *host;
 	struct sockaddr_in serv_addr;
-	struct timeval timestamp;
-	struct timeval timestamp_end;
+	FILE *file;
+	// struct timeval timestamp;
+	// struct timeval timestamp_end;
 
 	while (1)
 	{
@@ -51,6 +53,7 @@ int main(int argc, char *argv[])
 		if (strcmp(buf, "fim") == 0)
 		{
 			printf("Cliente encerrando...\n");
+			exit(1);
 			break;
 		}
 
@@ -60,15 +63,15 @@ int main(int argc, char *argv[])
 		system(command);
 	}
 
-	if(argc < 2){
-		fprintf(stderr,"Please enter the server's hostname!\n");
-		exit(1);
-	}
+	// if(argc < 2){
+	// 	fprintf(stderr,"Please enter the server's hostname!\n");
+	// 	exit(1);
+	// }
 
-	if((host=gethostbyname(argv[1])) == NULL){
-		perror("gethostbyname:");
-		exit(1);
-	}
+	// if((host=gethostbyname(argv[1])) == NULL){
+	// 	perror("gethostbyname:");
+	// 	exit(1);
+	// }
 
 	if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
 	{
@@ -88,7 +91,6 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 	memset(buf, 0x15, sizeof(buf));
-	// gettimeofday(&timestamp,NULL);
 
 	if ((sendbytes = send(sockfd, buf, sizeof(buf), 0)) == -1)
 	{
@@ -96,15 +98,41 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	// gettimeofday(&timestamp_end, NULL);
-	// printf("sendbytes: %d,time_stamp: %ld ms\n", sendbytes, TIME_DIFF(timestamp_end, timestamp));
+	// Criar diretório arquivos se não existir
+	struct stat st = {0};
+	if (stat("arquivos", &st) == -1)
+	{
+		mkdir("arquivos", 0700);
+	}
 
-	// if ((recvbytes = recv(sockfd, buf, MAXDATASIZE, 0)) == -1)
-	// {
-	// 	perror("recv");
-	// 	close(sockfd);
-	// 	exit(1);
-	// }
-	// printf("Client receive bytes: %d\n", recvbytes);
+	// Definir caminho do arquivo
+	snprintf(filepath, sizeof(filepath), "arquivos/%s", buf);
+
+	// Abrir arquivo local para escrita
+	file = fopen(filepath, "wb");
+	if (file == NULL)
+	{
+		perror("Não foi possível criar o arquivo local!");
+		close(sockfd);
+		return 1;
+	}
+
+	// Receber dados do servidor
+	while ((recvbytes = recv(sockfd, server_reply, sizeof(server_reply), 0)) > 0)
+	{
+		fwrite(server_reply, 1, recvbytes, file); // grava no arquivo local
+	}
+
+	if (recvbytes < 0)
+	{
+		printf("Falha ao receber dados do servidor\n");
+		fclose(file);
+		close(sockfd);
+		return 1;
+	}
+
+	// printf("Arquivo recebido e salvo em '%s'\n", filepath);
+
 	close(sockfd);
+	return 0;
 }

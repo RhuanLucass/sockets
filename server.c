@@ -12,6 +12,8 @@
 #include <unistd.h>		 //write
 #include <pthread.h>	 //for threading , link with lpthread
 
+#define MAXDATASIZE (1024 * 5)
+
 // the thread function
 void *connection_handler(void *);
 
@@ -82,28 +84,60 @@ void *connection_handler(void *socket_desc)
 	// Get the socket descriptor
 	int sock = *(int *)socket_desc;
 	int read_size;
-	char *message, client_message[2000];
+	char *message, file_buffer[MAXDATASIZE], filename[256];
+	FILE *file;
+	int bytes_read;
 
 	// Send some messages to the client
-	message = "Conexão realizada com sucesso!\n";
+	message = "Conexão realizada com sucesso!\n\n";
 	write(sock, message, strlen(message));
 
 	message = "Buscando arquivo...\n";
 	write(sock, message, strlen(message));
 
 	// Receive a message from client
-	while ((read_size = recv(sock, client_message, 2000, 0)) > 0)
+	while ((read_size = recv(sock, filename, MAXDATASIZE, 0)) > 0)
 	{
 		// end of string marker
-		client_message[read_size] = '\0';
+		// filename[read_size] = '\0';
 
-		// Send the message back to client
-		// write(sock, client_message, strlen(client_message));
-		printf("Arquivo: %s\n", client_message);
+		// Removendo nova linha, se existir
+		filename[strcspn(filename, "\n")] = 0;
+
+		// Abrir o arquivo para leitura
+		file = fopen(filename, "rb");
+
+		if (file == NULL)
+		{
+			// Send the message back to client
+			message = "Arquivo não encontrado!\n\n";
+			write(sock, message, strlen(message));
+			close(sock);
+			break;
+		}
+
+		message = "Arquivo encontrado com sucesso!\n\n";
+		write(sock, message, strlen(message));
+
+		message = "Enviando arquivo...\n\n";
+		write(sock, message, strlen(message));
+
+		// Enviando arquivo
+		while ((bytes_read = fread(file_buffer, 1, MAXDATASIZE, file)) > 0)
+    {
+      if (send(sock, file_buffer, bytes_read, 0) < 0)
+      {
+        perror("Erro ao enviar o arquivo!");
+        fclose(file);
+        close(sock);
+        return NULL;
+      }
+    }
+  } 
 
 		// clear the message buffer
-		memset(client_message, 0, 2000);
-	}
+		// memset(filename, 0, MAXDATASIZE);
+	// }
 
 	if (read_size == 0)
 	{
