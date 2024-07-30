@@ -13,6 +13,7 @@
 #include <pthread.h>	 //for threading , link with lpthread
 
 #define MAXDATASIZE (1024 * 5)
+#define SERVPORT 3333
 
 // the thread function
 void *connection_handler(void *);
@@ -33,7 +34,7 @@ int main(int argc, char *argv[])
 	// Prepare the sockaddr_in structure
 	server.sin_family = AF_INET;
 	server.sin_addr.s_addr = INADDR_ANY;
-	server.sin_port = htons(8888);
+	server.sin_port = htons(SERVPORT);
 
 	// Bind
 	if (bind(socket_desc, (struct sockaddr *)&server, sizeof(server)) < 0)
@@ -88,19 +89,9 @@ void *connection_handler(void *socket_desc)
 	FILE *file;
 	int bytes_read;
 
-	// Send some messages to the client
-	message = "Conexão realizada com sucesso!\n\n";
-	write(sock, message, strlen(message));
-
-	message = "Buscando arquivo...\n";
-	write(sock, message, strlen(message));
-
 	// Receive a message from client
 	while ((read_size = recv(sock, filename, MAXDATASIZE, 0)) > 0)
 	{
-		// end of string marker
-		// filename[read_size] = '\0';
-
 		// Removendo nova linha, se existir
 		filename[strcspn(filename, "\n")] = 0;
 
@@ -110,33 +101,29 @@ void *connection_handler(void *socket_desc)
 		if (file == NULL)
 		{
 			// Send the message back to client
-			message = "Arquivo não encontrado!\n\n";
-			write(sock, message, strlen(message));
+			int error_code = -404; // Código de erro para "arquivo não encontrado"
+			send(sock, &error_code, sizeof(error_code), 0);
 			close(sock);
-			break;
+			return NULL;
 		}
-
-		message = "Arquivo encontrado com sucesso!\n\n";
-		write(sock, message, strlen(message));
-
-		message = "Enviando arquivo...\n\n";
-		write(sock, message, strlen(message));
 
 		// Enviando arquivo
 		while ((bytes_read = fread(file_buffer, 1, MAXDATASIZE, file)) > 0)
-    {
-      if (send(sock, file_buffer, bytes_read, 0) < 0)
-      {
-        perror("Erro ao enviar o arquivo!");
-        fclose(file);
-        close(sock);
-        return NULL;
-      }
-    }
-  } 
+		{
+			if (send(sock, file_buffer, bytes_read, 0) < 0)
+			{
+				perror("Erro ao enviar o arquivo!");
+				fclose(file);
+				close(sock);
+				return NULL;
+			}
+		}
+		fclose(file);
+		break;
+	}
 
-		// clear the message buffer
-		// memset(filename, 0, MAXDATASIZE);
+	// clear the message buffer
+	// memset(filename, 0, MAXDATASIZE);
 	// }
 
 	if (read_size == 0)
@@ -149,5 +136,6 @@ void *connection_handler(void *socket_desc)
 		perror("recv failed");
 	}
 
+	close(sock);
 	return 0;
 }
