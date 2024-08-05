@@ -1,3 +1,10 @@
+/*
+  Compilar
+    cc client.c -o client
+  Iniciar cliente
+    ./client localhost
+*/
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

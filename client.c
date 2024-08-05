@@ -1,3 +1,10 @@
+/*
+  Compilar
+    cc server.c -o server -lpthread
+  Iniciar servidor
+    ./server
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -140,7 +147,7 @@ int main(int argc, char *argv[])
       }
       else if (recvbytes == 0)
       {
-        printf("Arquivo '%s' recebido com sucesso.\n", filepath);
+        printf("Arquivo salvo no endereço '%s'.\n\n", filepath);
       }
 
       // Fechando arquivo
