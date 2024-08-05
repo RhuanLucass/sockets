@@ -1,21 +1,15 @@
-/*
-		C socket server example, handles multiple clients using threads
-		Compile
-		gcc server.c -lpthread -o server
-*/
-
 #include <stdio.h>
-#include <string.h> //strlen
-#include <stdlib.h> //strlen
+#include <string.h>
+#include <stdlib.h>
 #include <sys/socket.h>
-#include <arpa/inet.h> //inet_addr
-#include <unistd.h>		 //write
-#include <pthread.h>	 //for threading , link with lpthread
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <pthread.h>
 
+// Definindo constantes de tamanho e a porta utilizada pelo servidor
 #define MAXDATASIZE (1024 * 5)
 #define SERVPORT 3333
 
-// the thread function
 void *connection_handler(void *);
 
 int main(int argc, char *argv[])
@@ -23,73 +17,70 @@ int main(int argc, char *argv[])
 	int socket_desc, client_sock, c;
 	struct sockaddr_in server, client;
 
-	// Create socket
+	// Criando socket
 	socket_desc = socket(AF_INET, SOCK_STREAM, 0);
 	if (socket_desc == -1)
 	{
-		printf("Could not create socket");
+		perror("Não foi possível criar o socket");
 	}
-	puts("Socket created");
+	puts("Socket criado com sucesso!");
 
-	// Prepare the sockaddr_in structure
+	// Criando ponto de conexão
 	server.sin_family = AF_INET;
 	server.sin_addr.s_addr = INADDR_ANY;
 	server.sin_port = htons(SERVPORT);
 
-	// Bind
+	// Associando socket à porta local do SO
 	if (bind(socket_desc, (struct sockaddr *)&server, sizeof(server)) < 0)
 	{
-		// print the error message
-		perror("bind failed. Error");
+		perror("Falha ao realizar bind");
 		return 1;
 	}
-	puts("bind done");
+	puts("Bind realizado com sucesso! ");
 
-	// Listen
+	// Habilitando solicitações de conexão
 	listen(socket_desc, 3);
+	puts("Aguardando conexões de entrada...");
 
-	// Accept and incoming connection
-	puts("Waiting for incoming connections...");
 	c = sizeof(struct sockaddr_in);
 	pthread_t thread_id;
 
+	// Aceitando conexões com os clientes
 	while ((client_sock = accept(socket_desc, (struct sockaddr *)&client, (socklen_t *)&c)))
 	{
-		puts("Connection accepted");
+		puts("Conexão aceita");
 
+		// Criando thread única para cada cliente
 		if (pthread_create(&thread_id, NULL, connection_handler, (void *)&client_sock) < 0)
 		{
-			perror("could not create thread");
+			perror("cNão foi possível criar a thread");
 			return 1;
 		}
 
-		// Now join the thread , so that we dont terminate before the thread
-		// pthread_join( thread_id , NULL);
-		puts("Handler assigned");
+		puts("Manipulando atributos");
 	}
 
+	// Verificando se houve falha na conexão com o cliente
 	if (client_sock < 0)
 	{
-		perror("accept failed");
+		perror("Falha ao aceitar conexão");
 		return 1;
 	}
 
 	return 0;
 }
 
-/*
- * This will handle connection for each client
- * */
+// Função responsável por controlar individualmente a conexão com cada cliente
 void *connection_handler(void *socket_desc)
 {
-	// Get the socket descriptor
+	// Pegando o descritor do socket
 	int sock = *(int *)socket_desc;
 	int read_size;
 	char *message, file_buffer[MAXDATASIZE], filename[256];
 	FILE *file;
 	int bytes_read;
 
-	// Receive a message from client
+	// Recebendo mensagem do cliente
 	while ((read_size = recv(sock, filename, MAXDATASIZE, 0)) > 0)
 	{
 		// Removendo nova linha, se existir
@@ -100,42 +91,45 @@ void *connection_handler(void *socket_desc)
 
 		if (file == NULL)
 		{
-			// Send the message back to client
+			// Enviando código de erro para o cliente em caso de falha
 			int error_code = -404; // Código de erro para "arquivo não encontrado"
 			send(sock, &error_code, sizeof(error_code), 0);
+
+			// Encerrando conexão
 			close(sock);
 			return NULL;
 		}
 
-		// Enviando arquivo
+		// Lendo bytes do arquivo
 		while ((bytes_read = fread(file_buffer, 1, MAXDATASIZE, file)) > 0)
 		{
+			// Enviando bytes do arquivo
 			if (send(sock, file_buffer, bytes_read, 0) < 0)
 			{
 				perror("Erro ao enviar o arquivo!");
+				// Fechando arquivo e conexão
 				fclose(file);
 				close(sock);
 				return NULL;
 			}
 		}
+		// Fechando arquivo e saindo do loop
 		fclose(file);
 		break;
 	}
 
-	// clear the message buffer
-	// memset(filename, 0, MAXDATASIZE);
-	// }
-
+	// Verificando se o cliente se desconectou ou se houve falha no recebimento
 	if (read_size == 0)
 	{
-		puts("Client disconnected");
+		puts("Cliente desconectado!");
 		fflush(stdout);
 	}
 	else if (read_size == -1)
 	{
-		perror("recv failed");
+		perror("Falha ao receber mensagem do cliente");
 	}
 
+	// Fechando conexão
 	close(sock);
 	return 0;
 }
